@@ -1,17 +1,251 @@
-const API={hn:'https://hacker-news.firebaseio.com/v0',npm:'https://registry.npmjs.org',pypi:'https://pypi.org/pypi',crates:'https://crates.io/api/v1/crates',maven:'https://search.maven.org/solrsearch/select'};let newsType='topstories',ecosystem='npm';
-document.addEventListener('DOMContentLoaded',()=>{bindNavigation();bindNews();bindPackages();loadDashboard();document.getElementById('refreshAll').onclick=loadDashboard;document.getElementById('refreshNews').onclick=()=>loadNews(newsType)});
-function bindNavigation(){document.querySelectorAll('[data-page]').forEach(b=>b.onclick=()=>showPage(b.dataset.page));document.querySelectorAll('[data-page-link]').forEach(b=>b.onclick=()=>showPage(b.dataset.pageLink))}function showPage(id){document.querySelectorAll('.page').forEach(p=>p.classList.toggle('active',p.id===id));document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('active',b.dataset.page===id));if(id==='news')loadNews(newsType)}
-function bindNews(){document.querySelectorAll('#newsTabs .subtab').forEach(b=>b.onclick=()=>{document.querySelectorAll('#newsTabs .subtab').forEach(x=>x.classList.remove('active'));b.classList.add('active');newsType=b.dataset.type;loadNews(newsType)})}
-function bindPackages(){document.querySelectorAll('.package-tab').forEach(b=>b.onclick=()=>{document.querySelectorAll('.package-tab').forEach(x=>x.classList.remove('active'));b.classList.add('active');ecosystem=b.dataset.eco;document.getElementById('packageInput').placeholder={npm:'react',pypi:'fastapi',crates:'tokio',maven:'spring-boot'}[ecosystem];document.getElementById('packageResult').innerHTML='<div class="empty">패키지 이름을 입력하세요.</div>'});document.getElementById('packageSearch').onclick=searchPackage;document.getElementById('packageInput').onkeydown=e=>{if(e.key==='Enter')searchPackage()}}
-async function loadDashboard(){loadDashboardNews();loadDashboardPackage('npm','react','dashNpm');loadDashboardPackage('pypi','fastapi','dashPypi');loadDashboardPackage('crates','tokio','dashCrates');loadDashboardPackage('maven','spring-boot','dashMaven')}
-async function loadDashboardNews(){const el=document.getElementById('dashNews');el.innerHTML='<div class="loading">불러오는 중...</div>';try{const ids=await json(`${API.hn}/topstories.json`),stories=await Promise.all(ids.slice(0,5).map(id=>json(`${API.hn}/item/${id}.json`)));el.innerHTML=stories.map(s=>`<div class="list-item"><a class="title" target="_blank" rel="noopener" href="${safe(s.url,`https://news.ycombinator.com/item?id=${s.id}`)}">${esc(s.title||'제목 없음')}</a><div class="meta">▲ ${s.score||0} · 💬 ${s.descendants||0}</div></div>`).join('')}catch(e){el.innerHTML='<div class="error">Hacker News를 불러오지 못했습니다.</div>'}}
-async function loadDashboardPackage(type,name,id){const el=document.getElementById(id);el.innerHTML='<div class="loading">불러오는 중...</div>';try{el.innerHTML=summary(await getPackage(type,name))}catch(e){el.innerHTML='<div class="error">정보를 불러오지 못했습니다.</div>'}}
-async function loadNews(type){const el=document.getElementById('newsList');el.innerHTML='<div class="loading">뉴스를 불러오는 중...</div>';try{const ids=await json(`${API.hn}/${type}.json`),stories=await Promise.all(ids.slice(0,30).map(id=>json(`${API.hn}/item/${id}.json`)));el.innerHTML=stories.filter(Boolean).map((s,i)=>`<div class="list-item"><div><span class="meta">${i+1}.</span> <a class="title" target="_blank" rel="noopener" href="${safe(s.url,`https://news.ycombinator.com/item?id=${s.id}`)}">${esc(s.title||'제목 없음')}</a></div><div class="meta">▲ ${s.score||0} · 💬 ${s.descendants||0} ${s.url?'· '+esc(host(s.url)):''}</div></div>`).join('')}catch(e){el.innerHTML='<div class="error">뉴스를 불러오지 못했습니다.</div>'}}
-async function searchPackage(){const name=document.getElementById('packageInput').value.trim(),el=document.getElementById('packageResult');if(!name){el.innerHTML='<div class="error">패키지 이름을 입력하세요.</div>';return}el.innerHTML='<div class="loading">검색 중...</div>';try{el.innerHTML=detail(await getPackage(ecosystem,name))}catch(e){console.error(e);el.innerHTML='<div class="error">패키지를 찾지 못했습니다. 이름을 확인해주세요.</div>'}}
-async function getPackage(type,name){if(type==='npm')return npm(name);if(type==='pypi')return pypi(name);if(type==='crates')return crates(name);return maven(name)}
-async function npm(name){const d=await json(`${API.npm}/${encodeURIComponent(name)}`,{headers:{Accept:'application/vnd.npm.install-v1+json'}});return{eco:'npm',name:d.name,version:d['dist-tags']?.latest||'-',desc:d.description||'설명이 없습니다.',license:d.license||'-',repo:repo(d.repository),url:`https://www.npmjs.com/package/${encodeURIComponent(d.name)}`}}
-async function pypi(name){const d=await json(`${API.pypi}/${encodeURIComponent(name)}/json`);return{eco:'PyPI',name:d.info?.name||name,version:d.info?.version||'-',desc:d.info?.summary||'설명이 없습니다.',license:d.info?.license||'-',repo:projectUrl(d.info?.project_urls),url:`https://pypi.org/project/${encodeURIComponent(d.info?.name||name)}/`}}
-async function crates(name){const d=await json(`${API.crates}/${encodeURIComponent(name)}`),c=d.crate;return{eco:'crates.io',name:c.name,version:c.newest_version||c.max_stable_version||'-',desc:c.description||'설명이 없습니다.',license:c.license||'-',repo:c.repository||'',url:`https://crates.io/crates/${encodeURIComponent(c.name)}`}}
-async function maven(name){const d=await json(`${API.maven}?q=${encodeURIComponent(name)}&rows=1&wt=json`),x=d.response?.docs?.[0];if(!x)throw Error('not found');const g=x.g||x.groupId||'-',a=x.a||x.artifactId||name;return{eco:'Maven Central',name:`${g}:${a}`,version:x.latestVersion||x.v||'-',desc:`Maven Central artifact: ${a}`,license:'-',repo:'',url:`https://central.sonatype.com/artifact/${encodeURIComponent(g)}/${encodeURIComponent(a)}`}}
-function summary(p){return`<div class="package-name">${esc(p.name)}</div><div class="version">v${esc(p.version)}</div><div class="desc">${esc(p.desc)}</div>`}function detail(p){return`<div class="package-name">${esc(p.name)}</div><div class="version">v${esc(p.version)}</div><div class="desc">${esc(p.desc)}</div><div class="detail-grid"><div class="detail"><div class="label">Ecosystem</div><div class="value">${esc(p.eco)}</div></div><div class="detail"><div class="label">License</div><div class="value">${esc(p.license||'-')}</div></div><div class="detail"><div class="label">Repository</div><div class="value">${p.repo?`<a class="external" target="_blank" rel="noopener" href="${safe(p.repo)}">Repository →</a>`:'-'}</div></div><div class="detail"><div class="label">Package Page</div><div class="value"><a class="external" target="_blank" rel="noopener" href="${safe(p.url)}">공식 페이지 →</a></div></div></div>`}
-async function json(url,opt={}){const r=await fetch(url,opt);if(!r.ok)throw Error(`${r.status} ${r.statusText}`);return r.json()}function repo(v){return typeof v==='string'?v:(v?.url||'')}function projectUrl(o){if(!o)return'';for(const k of ['Repository','Source','Source Code','GitHub'])if(o[k])return o[k];return''}function host(u){try{return new URL(u).hostname}catch{return''}}function safe(u,f='#'){if(!u)return f;try{const x=new URL(u);return ['http:','https:'].includes(x.protocol)?x.href:f}catch{return f}}function esc(v){return String(v??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;')}
+const API = {
+  npm: 'https://registry.npmjs.org',
+  pypi: 'https://pypi.org/pypi',
+  crates: 'https://crates.io/api/v1/crates',
+  maven: 'https://search.maven.org/solrsearch/select'
+};
+
+const REPRESENTATIVE = {
+  npm: ['react', 'next', 'express', 'axios', 'typescript'],
+  pypi: ['fastapi', 'django', 'requests', 'pandas', 'numpy'],
+  crates: ['tokio', 'serde', 'clap', 'reqwest', 'axum'],
+  maven: ['spring-boot', 'spring-core', 'jackson-databind', 'junit', 'lombok']
+};
+
+let ecosystem = 'npm';
+
+document.addEventListener('DOMContentLoaded', () => {
+  bindNavigation();
+  bindPackages();
+  loadDashboard();
+  document.getElementById('refreshAll').onclick = loadDashboard;
+});
+
+function bindNavigation() {
+  document.querySelectorAll('[data-page]').forEach(button => {
+    button.onclick = () => showPage(button.dataset.page);
+  });
+}
+
+function showPage(id) {
+  document.querySelectorAll('.page').forEach(page => {
+    page.classList.toggle('active', page.id === id);
+  });
+  document.querySelectorAll('.tab').forEach(button => {
+    button.classList.toggle('active', button.dataset.page === id);
+  });
+}
+
+function bindPackages() {
+  document.querySelectorAll('.package-tab').forEach(button => {
+    button.onclick = () => {
+      document.querySelectorAll('.package-tab').forEach(x => x.classList.remove('active'));
+      button.classList.add('active');
+      ecosystem = button.dataset.eco;
+      document.getElementById('packageInput').placeholder = {
+        npm: 'react',
+        pypi: 'fastapi',
+        crates: 'tokio',
+        maven: 'spring-boot'
+      }[ecosystem];
+      document.getElementById('packageResult').innerHTML = '<div class="empty">패키지 이름을 입력하세요.</div>';
+    };
+  });
+
+  document.getElementById('packageSearch').onclick = searchPackage;
+  document.getElementById('packageInput').onkeydown = event => {
+    if (event.key === 'Enter') searchPackage();
+  };
+}
+
+async function loadDashboard() {
+  await Promise.all([
+    loadDashboardPackages('npm', 'dashNpm'),
+    loadDashboardPackages('pypi', 'dashPypi'),
+    loadDashboardPackages('crates', 'dashCrates'),
+    loadDashboardPackages('maven', 'dashMaven')
+  ]);
+}
+
+async function loadDashboardPackages(type, elementId) {
+  const element = document.getElementById(elementId);
+  const names = REPRESENTATIVE[type];
+
+  element.innerHTML = names.map(() => `
+    <article class="package-card loading-card">
+      <div class="loading">불러오는 중...</div>
+    </article>
+  `).join('');
+
+  const results = await Promise.allSettled(
+    names.map(name => getPackage(type, name))
+  );
+
+  element.innerHTML = results.map((result, index) => {
+    if (result.status === 'fulfilled') {
+      return dashboardPackageCard(result.value);
+    }
+    return `
+      <article class="package-card">
+        <div class="package-name">${esc(names[index])}</div>
+        <div class="error small-error">정보를 불러오지 못했습니다.</div>
+      </article>
+    `;
+  }).join('');
+}
+
+function dashboardPackageCard(packageInfo) {
+  return `
+    <article class="package-card">
+      <div class="package-card-top">
+        <div class="package-name">${esc(packageInfo.name)}</div>
+        <span class="version">v${esc(packageInfo.version)}</span>
+      </div>
+      <div class="desc">${esc(packageInfo.desc)}</div>
+      <a class="external package-link" target="_blank" rel="noopener" href="${safe(packageInfo.url)}">공식 페이지 →</a>
+    </article>
+  `;
+}
+
+async function searchPackage() {
+  const name = document.getElementById('packageInput').value.trim();
+  const element = document.getElementById('packageResult');
+
+  if (!name) {
+    element.innerHTML = '<div class="error">패키지 이름을 입력하세요.</div>';
+    return;
+  }
+
+  element.innerHTML = '<div class="loading">검색 중...</div>';
+
+  try {
+    element.innerHTML = detail(await getPackage(ecosystem, name));
+  } catch (error) {
+    console.error(error);
+    element.innerHTML = '<div class="error">패키지를 찾지 못했습니다. 이름을 확인해주세요.</div>';
+  }
+}
+
+async function getPackage(type, name) {
+  if (type === 'npm') return npm(name);
+  if (type === 'pypi') return pypi(name);
+  if (type === 'crates') return crates(name);
+  return maven(name);
+}
+
+async function npm(name) {
+  const data = await json(`${API.npm}/${encodeURIComponent(name)}`, {
+    headers: { Accept: 'application/vnd.npm.install-v1+json' }
+  });
+
+  return {
+    eco: 'npm',
+    name: data.name,
+    version: data['dist-tags']?.latest || '-',
+    desc: data.description || '설명이 없습니다.',
+    license: data.license || '-',
+    repo: repo(data.repository),
+    url: `https://www.npmjs.com/package/${encodeURIComponent(data.name)}`
+  };
+}
+
+async function pypi(name) {
+  const data = await json(`${API.pypi}/${encodeURIComponent(name)}/json`);
+
+  return {
+    eco: 'PyPI',
+    name: data.info?.name || name,
+    version: data.info?.version || '-',
+    desc: data.info?.summary || '설명이 없습니다.',
+    license: data.info?.license || '-',
+    repo: projectUrl(data.info?.project_urls),
+    url: `https://pypi.org/project/${encodeURIComponent(data.info?.name || name)}/`
+  };
+}
+
+async function crates(name) {
+  const data = await json(`${API.crates}/${encodeURIComponent(name)}`);
+  const crate = data.crate;
+
+  return {
+    eco: 'crates.io',
+    name: crate.name,
+    version: crate.newest_version || crate.max_stable_version || '-',
+    desc: crate.description || '설명이 없습니다.',
+    license: crate.license || '-',
+    repo: crate.repository || '',
+    url: `https://crates.io/crates/${encodeURIComponent(crate.name)}`
+  };
+}
+
+async function maven(name) {
+  const data = await json(`${API.maven}?q=${encodeURIComponent(name)}&rows=1&wt=json`);
+  const item = data.response?.docs?.[0];
+
+  if (!item) throw new Error('Maven artifact not found');
+
+  const groupId = item.g || item.groupId || '-';
+  const artifactId = item.a || item.artifactId || name;
+
+  return {
+    eco: 'Maven Central',
+    name: `${groupId}:${artifactId}`,
+    version: item.latestVersion || item.v || '-',
+    desc: `Maven Central artifact: ${artifactId}`,
+    license: '-',
+    repo: '',
+    url: `https://central.sonatype.com/artifact/${encodeURIComponent(groupId)}/${encodeURIComponent(artifactId)}`
+  };
+}
+
+function detail(packageInfo) {
+  return `
+    <div class="package-name">${esc(packageInfo.name)}</div>
+    <div class="version">v${esc(packageInfo.version)}</div>
+    <div class="desc">${esc(packageInfo.desc)}</div>
+    <div class="detail-grid">
+      <div class="detail"><div class="label">Ecosystem</div><div class="value">${esc(packageInfo.eco)}</div></div>
+      <div class="detail"><div class="label">License</div><div class="value">${esc(packageInfo.license || '-')}</div></div>
+      <div class="detail"><div class="label">Repository</div><div class="value">${packageInfo.repo ? `<a class="external" target="_blank" rel="noopener" href="${safe(packageInfo.repo)}">Repository →</a>` : '-'}</div></div>
+      <div class="detail"><div class="label">Package Page</div><div class="value"><a class="external" target="_blank" rel="noopener" href="${safe(packageInfo.url)}">공식 페이지 →</a></div></div>
+    </div>
+  `;
+}
+
+async function json(url, options = {}) {
+  const response = await fetch(url, options);
+  if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
+  return response.json();
+}
+
+function repo(value) {
+  let url = typeof value === 'string' ? value : (value?.url || '');
+  return url.replace(/^git\+/, '').replace(/\.git$/, '');
+}
+
+function projectUrl(object) {
+  if (!object) return '';
+  for (const key of ['Repository', 'Source', 'Source Code', 'GitHub']) {
+    if (object[key]) return object[key];
+  }
+  return '';
+}
+
+function safe(url, fallback = '#') {
+  if (!url) return fallback;
+  try {
+    const parsed = new URL(url);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function esc(value) {
+  return String(value ?? '')
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
