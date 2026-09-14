@@ -1,8 +1,7 @@
 const API = {
   npm: 'https://registry.npmjs.org',
   pypi: 'https://pypi.org/pypi',
-  crates: 'https://crates.io/api/v1/crates',
-  maven: 'https://search.maven.org/solrsearch/select'
+  crates: 'https://crates.io/api/v1/crates'
 };
 
 const REPRESENTATIVE = {
