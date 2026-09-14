@@ -178,24 +178,48 @@ async function crates(name) {
   };
 }
 
+let mavenCache = null;
+
+async function loadMavenData() {
+    if (mavenCache) {
+        return mavenCache;
+    }
+
+    const response = await fetch("./data/maven.json", {
+        cache: "no-cache"
+    });
+
+    if (!response.ok) {
+        throw new Error(
+            `Maven JSON을 불러오지 못했습니다. HTTP ${response.status}`
+        );
+    }
+
+    mavenCache = await response.json();
+
+    return mavenCache;
+}
+
+
 async function maven(name) {
-  const data = await json(`${API.maven}?q=${encodeURIComponent(name)}&rows=1&wt=json`);
-  const item = data.response?.docs?.[0];
+    const data = await loadMavenData();
 
-  if (!item) throw new Error('Maven artifact not found');
+    const packageKey = name.toLowerCase();
 
-  const groupId = item.g || item.groupId || '-';
-  const artifactId = item.a || item.artifactId || name;
+    const pkg = data.packages.find(
+        item => item.key.toLowerCase() === packageKey
+    );
 
-  return {
-    eco: 'Maven Central',
-    name: `${groupId}:${artifactId}`,
-    version: item.latestVersion || item.v || '-',
-    desc: `Maven Central artifact: ${artifactId}`,
-    license: '-',
-    repo: '',
-    url: `https://central.sonatype.com/artifact/${encodeURIComponent(groupId)}/${encodeURIComponent(artifactId)}`
-  };
+    if (!pkg) {
+        throw new Error(`Maven 패키지를 찾을 수 없습니다: ${name}`);
+    }
+
+    return {
+        name: pkg.name,
+        version: pkg.version,
+        description: pkg.description,
+        url: pkg.url
+    };
 }
 
 function detail(packageInfo) {
