@@ -1,5 +1,5 @@
 {
-  "updatedAt": "2026-09-18T01:58:43.331755+00:00",
+  "updatedAt": "2026-09-19T02:03:56.695729+00:00",
   "packages": [
     {
       "key": "spring-boot",
@@ -18,14 +18,14 @@
     {
       "key": "jackson-databind",
       "name": "com.fasterxml.jackson.core:jackson-databind",
-      "version": "2.19.0",
+      "version": "-",
       "description": "Jackson data-binding",
       "url": "https://central.sonatype.com/artifact/com.fasterxml.jackson.core/jackson-databind"
     },
     {
       "key": "junit",
       "name": "org.junit.jupiter:junit-jupiter",
-      "version": "-",
+      "version": "5.13.0-M3",
       "description": "JUnit Jupiter",
       "url": "https://central.sonatype.com/artifact/org.junit.jupiter/junit-jupiter"
     },
